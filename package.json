@@ -1,0 +1,31 @@
+{
+  "name": "cablepost-modded-minigames",
+  "version": "0.0.2",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "buildLinux": "electron-builder --linux",
+    "buildWin": "electron-builder --win",
+    "buildMac": "electron-builder --mac"
+  },
+  "keywords": [
+    "Minecraft",
+    "Launcher"
+  ],
+  "author": "BillBodkin",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^13.1.4",
+    "electron-builder": "^22.11.7"
+  },
+  "dependencies": {
+    "async-get-file": "^1.0.4",
+    "electron-log": "^4.3.5",
+    "fs-exists-sync": "^0.1.0",
+    "js-file-downloader": "^1.1.20",
+    "minecraft-launcher-core": "^3.16.4",
+    "msmc": "^2.1.3",
+    "nodejs-file-downloader": "^4.7.1"
+  }
+}
