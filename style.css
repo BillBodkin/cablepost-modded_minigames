@@ -1,0 +1,28 @@
+body {
+	margin: 0px;
+	padding: 0px;
+	overflow: hidden;
+}
+
+div {
+	background-color: #292929;
+	color: #c13f45;
+	position: absolute;
+	top: 0px;
+	left: 0px;
+	margin: 0px;
+	padding: 0px;
+	width: 800px;
+	height: 600px;
+	text-align: center;
+}
+
+h1 {
+	text-align: center;
+	font-family: Tahoma, sans-serif;
+	margin-top: 245px;
+	margin-left: 250px;
+	margin-right: 250px;
+	padding-bottom: 30px;
+	border-bottom: 2px solid #c13f45;
+}

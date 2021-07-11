@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, TouchBarSegmentedControl } = require('electron');
 const { Client, Authenticator } = require('minecraft-launcher-core');
 const electronLog = require('electron-log');
 let path = require('path');
@@ -7,15 +7,33 @@ const get = require("async-get-file");
 const Downloader = require('nodejs-file-downloader');
 let exists = require('fs-exists-sync');
 const { formatWithOptions } = require('util');
+const os = require('os');
+let AdmZip = require("adm-zip");
+const inly = require('inly');
+const fetch = require('node-fetch');
 
 const launcher = new Client();
 let win = null;
 let mcAuth = null;
 let rootDir = app.getPath('userData');
-let launcherVersion = "0.0.2";
+let launcherVersion = "0.0.5";
 
-let minMemory = "4G";
-let maxMemory = "8G";
+let maxMemoryNum = (Math.floor(os.totalmem() / 1073741824) - 1);
+if(maxMemoryNum > 8){
+	maxMemoryNum = 8;
+}
+else if(maxMemoryNum < 1){
+	maxMemoryNum = 1;
+}
+
+let minMemoryNum = Math.floor(maxMemoryNum / 2);
+if(minMemoryNum < 1){
+	minMemoryNum = 1;
+}
+
+let minMemory = minMemoryNum + "G";
+let maxMemory = maxMemoryNum + "G";
+let javaPath = undefined;
 
 function Log(msg, popup = false){
 	electronLog.log(msg);
@@ -37,6 +55,7 @@ function CreateWindow () {
 	win = new BrowserWindow({
 		width: 800,
 		height: 600,
+		resizable: false,
 		webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
@@ -51,12 +70,91 @@ function CreateWindow () {
 app.whenReady().then(() => {
 	fs.writeFileSync(rootDir + "/launcherVersion.js", "let launcherVersion = " + launcherVersion + ";");
 	fs.writeFileSync(rootDir + "/launcherVersion.txt", launcherVersion);
-	if(exists(rootDir + "/mcAuth.json")){
-		//TODO
-	}
 	CreateWindow();
 	DownloadLauncherPage();
 });
+
+ipcMain.on("DownloadPortalbleJava", function(event, data){
+	DownloadPortalbleJava();
+});
+
+async function DownloadPortalbleJava(){
+	if (exists(rootDir + "/portableJava")){
+		Log("Already have Portable Java", true);
+		return false;
+		Log("Deleting existing portable java...");
+		fs.rmdirSync(rootDir + "/portableJava", { recursive: true });
+	}
+	fs.mkdirSync(rootDir + "/portableJava");
+	
+	let downloadUrl = "";
+	let downloadFile = "";
+	
+	let platform = os.platform().toString();
+	if(platform == "linux"){
+		downloadUrl = "https://download.java.net/java/GA/jdk16.0.1/7147401fd7354114ac51ef3e1328291f/9/GPL/openjdk-16.0.1_linux-x64_bin.tar.gz";
+		downloadFile = "openjdk-16.0.1_linux-x64_bin.tar.gz";
+	}
+	else if(platform == "win32"){
+		downloadUrl = "https://download.java.net/java/GA/jdk16.0.1/7147401fd7354114ac51ef3e1328291f/9/GPL/openjdk-16.0.1_windows-x64_bin.zip";
+		downloadFile = "openjdk-16.0.1_windows-x64_bin.zip";
+	}
+	else{
+		Log("Cannot download portable Java for this OS", true);
+		return false;
+	}
+	
+	Log("Downloading: " + downloadFile);
+	const downloader = new Downloader({
+		url: downloadUrl,
+		directory: rootDir + "/portableJava",
+		fileName: downloadFile,
+		cloneFiles: false,
+		onProgress:function(percentage, chunk, remainingSize){
+        	Log("Downloading: " + downloadFile + " " + percentage.toString() + "%");
+    	}
+	});
+	await downloader.download();
+	
+	//let zip = new AdmZip(rootDir + "/portableJava/" + downloadFile);
+	//zip.extractAllTo(rootDir + "/portableJava/", true);
+	
+	const extract = inly(
+		rootDir + "/portableJava/" + downloadFile,
+		rootDir + "/portableJava/"
+	);
+	
+	extract.on('progress', (percent) => {
+		Log("Extracting: " + downloadFile + " " + percent.toString() + "%");
+	});
+	
+	extract.on('end', () => {
+		SetJavaPath();
+		win.webContents.send("DownloadedPortalbleJava");
+		return true;
+	});
+}
+
+async function SetJavaPath(){
+	Log("Getting Java path...");
+	if(exists(rootDir + "javaPath.txt")){
+		javaPath = fs.readFileSync(rootDir + "javaPath.txt");
+	}
+	else if(exists(rootDir + "/portableJava/jdk-16.0.1/bin/java")){
+		javaPath = rootDir + "/portableJava/jdk-16.0.1/bin/java";
+	}
+	else if(exists(rootDir + "/portableJava/jdk-16.0.1/bin/java.exe")){
+		javaPath = rootDir + "/portableJava/jdk-16.0.1/bin/java.exe";
+	}
+	else{
+		javaPath = undefined;
+	}
+	let jp = javaPath;
+	if(jp == undefined){
+		jp = "Default";
+	}
+	Log("Java path: " + jp);
+}
 
 async function DownloadLauncherPage(){
 	Delete(rootDir + "/launcherScreen.html");
@@ -84,6 +182,71 @@ async function DownloadLauncherPage(){
 	await Sleep(500);
 	
 	win.loadFile(rootDir + '/launcherScreen.html');
+	await Sleep(100);
+	await SetJavaPath();
+	await CheckLoggedIn();
+	win.webContents.send("minMemory", minMemory);
+	win.webContents.send("maxMemory", maxMemory);
+}
+
+async function CheckLoggedIn(){
+	if(!exists(rootDir + "/mcAuth.json")){
+		win.webContents.send("showLoginArea");
+		return;
+	}
+	
+	let mcAuthJson = require(rootDir + "/mcAuth.json");
+	//console.log(mcAuthJson.access_token);
+	//console.log(mcAuthJson.client_token);
+	//console.log(mcAuthJson.selected_profile);
+	
+	try{
+		//mcAuth = await Authenticator.refreshAuth(mcAuthJson.access_token, mcAuthJson.client_token, null);//mcAuthJson.selected_profile
+		mcAuth = await RefreshToken(mcAuthJson.access_token, mcAuthJson.client_token);
+		mcAuth.name = mcAuth.selected_profile.name;
+		mcAuth.uuid = mcAuth.selected_profile.id;
+		if(mcAuth == null){
+			throw "Failed to login";
+		}
+		fs.writeFileSync(rootDir + "/mcAuth.json", JSON.stringify(mcAuth));
+	}
+	catch(e){
+		console.log(e);
+		Log("Failed to auto login", true);
+		mcAuth = null;
+		win.webContents.send("showLoginArea");
+		return false;
+	}
+	//console.log(mcAuth);
+	
+	Log("Logged in as: " + mcAuth.name);
+	win.webContents.send("loggedIn");
+	return true;
+}
+
+async function RefreshToken(accessToken, clientToken){
+	let result = await fetch('https://authserver.mojang.com/refresh', {
+		method: 'POST',
+		body: JSON.stringify({
+			accessToken: accessToken,
+			clientToken: clientToken
+		}),
+		headers: { 'Content-Type': 'application/json' }
+	});
+	
+	const json = await result.json();
+	//console.log(json);
+	
+	if (json.error) {
+		Log("Error: " + json.error.toString());
+		return null;
+	} else {
+		return {
+			access_token: json.accessToken,
+			client_token: json.clientToken,
+			selected_profile: json.selectedProfile
+		};
+	}
 }
 
 ipcMain.on("mojang_login", async function(event, data){
@@ -96,6 +259,7 @@ ipcMain.on("mojang_login", async function(event, data){
 		if(mcAuth.selected_profile == null){
 			Log("Invalid login", true);
 			mcAuth = null;
+			win.webContents.send("showLoginArea");
 			return;
 		}
 		if(data.save){
@@ -105,8 +269,15 @@ ipcMain.on("mojang_login", async function(event, data){
 	catch(e){
 		Log("Login error: " + e, true);
 		mcAuth = null;
+		win.webContents.send("showLoginArea");
 		return;
 	}
+	
+	Log("Logged in as: " + mcAuth.name);
+	win.webContents.send("loggedIn");
+});
+
+ipcMain.on("play", function(event, data){
 	UpdateAndPlay();
 });
 
@@ -144,7 +315,8 @@ async function Play(){
 		memory: {
 			max: maxMemory,
 			min: minMemory
-		}
+		},
+		javaPath: javaPath
 	}
 
 	launcher.launch(opts);
@@ -166,12 +338,24 @@ async function UpdateFromJson(){
 	//fs.rmdirSync(rootDir + "/minecraft", { recursive: true });
 	await Sleep(100);
 	Log("Downloading modpackFiles.json");
+	/*
 	await get(
 		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/modpackFiles.json", {
 			directory: rootDir,
 			filename: "modpackFiles.json"
 		}
 	);
+	*/
+	const downloader = new Downloader({
+		url: "https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/modpackFiles.json",
+		directory: rootDir,
+		fileName: "modpackFiles.json",
+		cloneFiles: false,
+		onProgress:function(percentage, chunk, remainingSize){
+        	Log("Downloading modpackFiles.json " + percentage.toString() + "%");
+    	}
+	});
+	await downloader.download();
 	Log("Downloaded modpackFiles.json");
 	await Sleep(500);
 	let modpackFiles = require(rootDir + "/modpackFiles.json");
@@ -221,7 +405,10 @@ async function CheckFolderUpdated(folder, data, dataCurrent){
 						url: data[item].url,
 						directory: folder,
 						fileName: item,
-						cloneFiles: false
+						cloneFiles: false,
+						onProgress:function(percentage, chunk, remainingSize){
+							Log("Downloading: " + data[item].url + "\nTo: " + path.resolve(folder + "/" + item) + "\n" + percentage.toString() + "%");
+						}
 					});
 					await downloader.download();
 				}
