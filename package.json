@@ -1,17 +1,23 @@
 {
   "name": "cablepost-modded-minigames",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "buildLinux": "electron-builder --linux",
     "buildWin": "electron-builder --win",
-    "buildMac": "electron-builder --mac"
+    "buildMac": "electron-builder --mac",
+    "buildAll": "electron-builder --linux;electron-builder --win;electron-builder --mac"
   },
   "keywords": [
     "Minecraft",
-    "Launcher"
+    "Launcher",
+    "Mini",
+    "Madness",
+    "Minigames",
+    "Modded",
+    "CablePost"
   ],
   "author": "BillBodkin",
   "license": "MIT",
