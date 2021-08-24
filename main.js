@@ -220,8 +220,19 @@ async function CheckLoggedIn(){
 	//console.log(mcAuth);
 	
 	Log("Logged in as: " + mcAuth.name);
-	win.webContents.send("loggedIn");
+	await DownloadSkin(mcAuth.uuid);
+	win.webContents.send("loggedIn", mcAuth.uuid);
 	return true;
+}
+
+async function DownloadSkin(uuid){
+	await get(
+		"https://crafatar.com/skins/" + uuid, {
+			directory: rootDir,
+			filename: "skin.png"
+		}
+	);
+	await Sleep(100);
 }
 
 async function RefreshToken(accessToken, clientToken){
@@ -274,7 +285,8 @@ ipcMain.on("mojang_login", async function(event, data){
 	}
 	
 	Log("Logged in as: " + mcAuth.name);
-	win.webContents.send("loggedIn");
+	await DownloadSkin(mcAuth.uuid);
+	win.webContents.send("loggedIn", mcAuth.uuid);
 });
 
 ipcMain.on("play", function(event, data){
@@ -378,8 +390,10 @@ async function CheckFolderUpdated(folder, data, dataCurrent){
 	if(folder == rootDir + "/minecraft/mods"){
 		//delete any mods not in JSON
 		fs.readdirSync(folder).forEach(file => {
-			console.log(file);
-			//fs.unlinkSync(folder + "/" + file);//Uncomment later
+			if(!(file in data)){
+				Log("Deleting old mod: " + file);
+				fs.unlinkSync(folder + "/" + file);
+			}
 		});
 	}
 	
