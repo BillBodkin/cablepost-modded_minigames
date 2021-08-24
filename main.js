@@ -11,6 +11,7 @@ const os = require('os');
 let AdmZip = require("adm-zip");
 const inly = require('inly');
 const fetch = require('node-fetch');
+const { Console } = require('console');
 
 const launcher = new Client();
 let win = null;
@@ -387,7 +388,7 @@ async function CheckFolderUpdated(folder, data, dataCurrent){
 		fs.mkdirSync(folder);
 	}
 	
-	if(folder == rootDir + "/minecraft/mods"){
+	if(folder == rootDir + "/minecraft/mods" || folder == (rootDir + "/minecraft/mods").replace("/", "\\")){s
 		//delete any mods not in JSON
 		fs.readdirSync(folder).forEach(file => {
 			if(!(file in data)){
