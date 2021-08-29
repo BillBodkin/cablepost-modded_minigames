@@ -6,7 +6,7 @@ const fs = require('fs');
 const get = require("async-get-file");
 const Downloader = require('nodejs-file-downloader');
 let exists = require('fs-exists-sync');
-const { formatWithOptions } = require('util');
+const { formatWithOptions, callbackify } = require('util');
 const os = require('os');
 let AdmZip = require("adm-zip");
 const inly = require('inly');
@@ -17,9 +17,9 @@ const launcher = new Client();
 let win = null;
 let mcAuth = null;
 let rootDir = app.getPath('userData');
-let launcherVersion = "0.0.5";
+let launcherVersion = "0.0.7";
 
-let maxMemoryNum = (Math.floor(os.totalmem() / 1073741824) - 1);
+let maxMemoryNum = Math.floor((os.freemem() / 1073741824) - 0.2);//(Math.floor(os.totalmem() / 1073741824) - 1);
 if(maxMemoryNum > 8){
 	maxMemoryNum = 8;
 }
@@ -57,7 +57,7 @@ function CreateWindow () {
 		width: 800,
 		height: 600,
 		resizable: false,
-		icon: __dirname + '/favicon.ico',
+		icon: rootDir + '/favicon.ico',
 		webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
@@ -70,22 +70,37 @@ function CreateWindow () {
 }
 
 app.whenReady().then(() => {
+	Start();
+});
+
+async function Start(){
 	fs.writeFileSync(rootDir + "/launcherVersion.js", "let launcherVersion = " + launcherVersion + ";");
 	fs.writeFileSync(rootDir + "/launcherVersion.txt", launcherVersion);
+	
+	if(!exists(rootDir + "/favicon.ico")){
+		await get(
+			"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/favicon.ico", {
+				directory: rootDir,
+				filename: "favicon.ico"
+			}
+		);
+	}
+	
 	CreateWindow();
 	DownloadLauncherPage();
-});
+}
 
 ipcMain.on("DownloadPortalbleJava", function(event, data){
 	DownloadPortalbleJava();
 });
 
-async function DownloadPortalbleJava(){
+async function DownloadPortalbleJava(callback = function(){win.webContents.send("DownloadedPortalbleJava");}){
 	if (exists(rootDir + "/portableJava")){
-		Log("Already have Portable Java", true);
+		Log("Already have Portable Java");
+		callback(false);
 		return false;
-		Log("Deleting existing portable java...");
-		fs.rmdirSync(rootDir + "/portableJava", { recursive: true });
+		//Log("Deleting existing portable java...");
+		//fs.rmdirSync(rootDir + "/portableJava", { recursive: true });
 	}
 	fs.mkdirSync(rootDir + "/portableJava");
 	
@@ -132,7 +147,7 @@ async function DownloadPortalbleJava(){
 	
 	extract.on('end', () => {
 		SetJavaPath();
-		win.webContents.send("DownloadedPortalbleJava");
+		callback(true);
 		return true;
 	});
 }
@@ -164,31 +179,33 @@ async function DownloadLauncherPage(){
 	await Sleep(100);
 	Log("Downloading Launcher Screen");
 	await get(
-		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreen.html", {
+		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherScreen.html", {
 			directory: rootDir,
 			filename: "launcherScreen.html"
 		}
 	);
 	await get(
-		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherRenderer.js", {
+		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherRenderer.js", {
 			directory: rootDir,
 			filename: "renderer.js"
 		}
 	);
 	await get(
-		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherStyle.css", {
+		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherStyle.css", {
 			directory: rootDir,
 			filename: "style.css"
 		}
 	);
-	await Sleep(500);
 	
+	await Sleep(500);
 	win.loadFile(rootDir + '/launcherScreen.html');
-	await Sleep(100);
+	await Sleep(500);
 	await SetJavaPath();
-	await CheckLoggedIn();
-	win.webContents.send("minMemory", minMemory);
-	win.webContents.send("maxMemory", maxMemory);
+	await DownloadPortalbleJava(async function(){
+		await CheckLoggedIn();
+		win.webContents.send("minMemory", minMemory);
+		win.webContents.send("maxMemory", maxMemory);
+	});
 }
 
 async function CheckLoggedIn(){
@@ -389,7 +406,7 @@ async function CheckFolderUpdated(folder, data, dataCurrent){
 		fs.mkdirSync(folder);
 	}
 	
-	if(folder == rootDir + "/minecraft/mods" || folder == (rootDir + "/minecraft/mods").replace("/", "\\")){s
+	if(folder == rootDir + "/minecraft/mods" || folder == (rootDir + "/minecraft/mods").replace("/", "\\")){
 		//delete any mods not in JSON
 		fs.readdirSync(folder).forEach(file => {
 			if(!(file in data)){
@@ -401,7 +418,7 @@ async function CheckFolderUpdated(folder, data, dataCurrent){
 	
 	for(let item in data){
 		if(data[item].FILE === true){
-			if(dataCurrent[item] != null && data[item].version != dataCurrent[item].version){
+			if(dataCurrent[item] == null || data[item].version != dataCurrent[item].version){
 				Log("Deleting: " + folder + "/" + item);
 				Delete(folder + "/" + item);
 			}
