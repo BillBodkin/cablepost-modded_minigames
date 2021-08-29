@@ -26,9 +26,6 @@ jobs:
       
       - name: Setup
         run: npm install
-        
-      - name: Build Windows
-        run: npm run buildWin
       
       - name: Build Linux
         run: npm run buildLinux
@@ -47,6 +44,3 @@ jobs:
         
       - name: Build Windows
         run: npm run buildWin
-      
-      - name: Build Linux
-        run: npm run buildLinux

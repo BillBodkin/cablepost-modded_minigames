@@ -1,14 +1,32 @@
 {
   "name": "cablepost-modded-minigames",
   "version": "0.0.7",
-  "description": "",
+  "description": "Mini Madness Launcher - Modded Minecraft Minigames",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "dist": "electron-builder",
     "buildLinux": "electron-builder --linux",
     "buildWin": "electron-builder --win",
     "buildMac": "electron-builder --mac",
     "buildAll": "electron-builder --linux;electron-builder --win;electron-builder --mac"
+  },
+  "build": {
+    "appId": "uk.co.cablepost.minimadness",
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "snap",
+        "deb",
+        "rpm"
+      ],
+      "icon": "build/icon.png",
+      "category": "Game"
+    }
   },
   "keywords": [
     "Minecraft",
@@ -19,7 +37,10 @@
     "Modded",
     "CablePost"
   ],
-  "author": "BillBodkin",
+  "author": {
+    "name": "BillBodkin",
+    "email": "billyg270@gmail.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "electron": "^13.1.4",
