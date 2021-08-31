@@ -1,23 +1,28 @@
-const { app, BrowserWindow, ipcMain, TouchBarSegmentedControl } = require('electron');
+const { app, BrowserWindow, ipcMain/*, TouchBarSegmentedControl */} = require('electron');
 const { Client, Authenticator } = require('minecraft-launcher-core');
+const msmc = require("msmc");
 const electronLog = require('electron-log');
 let path = require('path');
 const fs = require('fs');
 const get = require("async-get-file");
 const Downloader = require('nodejs-file-downloader');
 let exists = require('fs-exists-sync');
-const { formatWithOptions, callbackify } = require('util');
+//const { formatWithOptions, callbackify, isRegExp } = require('util');
 const os = require('os');
-let AdmZip = require("adm-zip");
+//let AdmZip = require("adm-zip");
 const inly = require('inly');
 const fetch = require('node-fetch');
-const { Console } = require('console');
+//const { Console } = require('console');
+
+msmc.setFetch(fetch);
 
 const launcher = new Client();
 let win = null;
 let mcAuth = null;
 let rootDir = app.getPath('userData');
 let launcherVersion = "0.0.7";
+let lastLauncherVersion = "";
+let redownloadWebContent = true;//for testing - CHANGE ME ON PUBLISH
 
 let maxMemoryNum = Math.floor((os.freemem() / 1073741824) - 0.2);//(Math.floor(os.totalmem() / 1073741824) - 1);
 if(maxMemoryNum > 8){
@@ -56,11 +61,13 @@ function CreateWindow () {
 	win = new BrowserWindow({
 		width: 800,
 		height: 600,
+		backgroundColor: '#292929',
 		resizable: false,
 		icon: rootDir + '/favicon.ico',
+		webviewTag: true,
 		webPreferences: {
             nodeIntegration: true,
-            contextIsolation: false,
+            contextIsolation: false
         }//,
 		//frame: false
 	});
@@ -74,10 +81,12 @@ app.whenReady().then(() => {
 });
 
 async function Start(){
-	fs.writeFileSync(rootDir + "/launcherVersion.js", "let launcherVersion = " + launcherVersion + ";");
-	fs.writeFileSync(rootDir + "/launcherVersion.txt", launcherVersion);
-	
-	if(!exists(rootDir + "/favicon.ico")){
+	lastLauncherVersion = fs.readFileSync(rootDir + "/launcherVersion.txt").toString().replace(/\s+/g, '');
+	if(lastLauncherVersion != launcherVersion || redownloadWebContent){
+		//fs.writeFileSync(rootDir + "/launcherVersion.js", "let launcherVersion = " + launcherVersion + ";");//Not needed
+		fs.writeFileSync(rootDir + "/launcherVersion.txt", launcherVersion);
+		
+		Delete(rootDir + "/favicon.ico");
 		await get(
 			"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/favicon.ico", {
 				directory: rootDir,
@@ -155,7 +164,7 @@ async function DownloadPortalbleJava(callback = function(){win.webContents.send(
 async function SetJavaPath(){
 	Log("Getting Java path...");
 	if(exists(rootDir + "javaPath.txt")){
-		javaPath = fs.readFileSync(rootDir + "javaPath.txt");
+		javaPath = fs.readFileSync(rootDir + "/javaPath.txt");
 	}
 	else if(exists(rootDir + "/portableJava/jdk-16.0.1/bin/java")){
 		javaPath = rootDir + "/portableJava/jdk-16.0.1/bin/java";
@@ -174,28 +183,52 @@ async function SetJavaPath(){
 }
 
 async function DownloadLauncherPage(){
-	Delete(rootDir + "/launcherScreen.html");
-	Delete(rootDir + "/renderer.js");
-	await Sleep(100);
-	Log("Downloading Launcher Screen");
-	await get(
-		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherScreen.html", {
-			directory: rootDir,
-			filename: "launcherScreen.html"
-		}
-	);
-	await get(
-		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherRenderer.js", {
-			directory: rootDir,
-			filename: "renderer.js"
-		}
-	);
-	await get(
-		"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherStyle.css", {
-			directory: rootDir,
-			filename: "style.css"
-		}
-	);
+	if(launcherVersion != lastLauncherVersion || redownloadWebContent){
+		Log("Deleting old Launcher Screen");
+		
+		Delete(rootDir + "/launcherScreen.html");
+		Delete(rootDir + "/renderer.js");
+		Delete(rootDir + "/style.css");
+		
+		await Sleep(100);
+		Log("Downloading Launcher Screen");
+		
+		await get(
+			"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherScreen.html", {
+				directory: rootDir,
+				filename: "launcherScreen.html"
+			}
+		);
+		await get(
+			"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherRenderer.js", {
+				directory: rootDir,
+				filename: "renderer.js"
+			}
+		);
+		await get(
+			"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/launcherScreens/" + launcherVersion + "/launcherStyle.css", {
+				directory: rootDir,
+				filename: "style.css"
+			}
+		);
+	}
+	
+	if(!exists(rootDir + "/three.min.js")){
+		await get(
+			"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/three.min.js", {
+				directory: rootDir,
+				filename: "three.min.js"
+			}
+		);
+	}
+	if(!exists(rootDir + "/GLTFLoader.js")){
+		await get(
+			"https://cablepost.co.uk/mcModpack/Modded%20Minigames/Launcher/GLTFLoader.js", {
+				directory: rootDir,
+				filename: "GLTFLoader.js"
+			}
+		);
+	}
 	
 	await Sleep(500);
 	win.loadFile(rootDir + '/launcherScreen.html');
@@ -209,39 +242,84 @@ async function DownloadLauncherPage(){
 }
 
 async function CheckLoggedIn(){
-	if(!exists(rootDir + "/mcAuth.json")){
-		win.webContents.send("showLoginArea");
-		return;
+	async function CheckLoggedIn2(){
+		if(await CheckLoggedInMS()){
+			return true;
+		}
+		if(await CheckLoggedInMojang()){
+			return true;
+		}
+		
+		return false;
 	}
 	
-	let mcAuthJson = require(rootDir + "/mcAuth.json");
-	//console.log(mcAuthJson.access_token);
-	//console.log(mcAuthJson.client_token);
-	//console.log(mcAuthJson.selected_profile);
+	if(await CheckLoggedIn2()){
+		Log("Logged in as: " + mcAuth.name);
+		await DownloadSkin(mcAuth.uuid);
+		win.webContents.send("loggedIn", mcAuth.uuid);
+	}
+	else{
+		win.webContents.send("showLoginArea");
+	}
+}
+
+async function CheckLoggedInMS(){
+	if(!exists(rootDir + "/msmcAuth.json")){
+		return false;
+	}
 	
-	try{
-		//mcAuth = await Authenticator.refreshAuth(mcAuthJson.access_token, mcAuthJson.client_token, null);//mcAuthJson.selected_profile
-		mcAuth = await RefreshToken(mcAuthJson.access_token, mcAuthJson.client_token);
-		mcAuth.name = mcAuth.selected_profile.name;
-		mcAuth.uuid = mcAuth.selected_profile.id;
+	try {
+		let mcAuthJson = require(rootDir + "/msmcAuth.json");
+		mcAuth = await msmc.refresh(mcAuthJson.profile);
 		if(mcAuth == null){
 			throw "Failed to login";
 		}
-		fs.writeFileSync(rootDir + "/mcAuth.json", JSON.stringify(mcAuth));
+		mcAuth.name = mcAuth.profile.name;
+		mcAuth.uuid = mcAuth.profile.id;
+		fs.writeFileSync(rootDir + "/msmcAuth.json", JSON.stringify(mcAuth));
+		return true;
 	}
 	catch(e){
 		console.log(e);
 		Log("Failed to auto login", true);
 		mcAuth = null;
-		win.webContents.send("showLoginArea");
+		//Delete(rootDir + "/msmcAuth.json");//brb
 		return false;
 	}
-	//console.log(mcAuth);
 	
-	Log("Logged in as: " + mcAuth.name);
-	await DownloadSkin(mcAuth.uuid);
-	win.webContents.send("loggedIn", mcAuth.uuid);
-	return true;
+	//msmc.MSLogin(mcAuthJson.access_token, callback, updates);
+	
+	//fs.writeFileSync(rootDir + "/msmcAuth.json", JSON.stringify(mcAuth));
+}
+
+async function CheckLoggedInMojang(){
+	if(!exists(rootDir + "/mcAuth.json")){
+		return false;
+	}
+	
+	try{
+		let mcAuthJson = require(rootDir + "/mcAuth.json");
+		//console.log(mcAuthJson.access_token);
+		//console.log(mcAuthJson.client_token);
+		//console.log(mcAuthJson.selected_profile);
+		
+		//mcAuth = await Authenticator.refreshAuth(mcAuthJson.access_token, mcAuthJson.client_token, null);//mcAuthJson.selected_profile
+		mcAuth = await RefreshToken(mcAuthJson.access_token, mcAuthJson.client_token);
+		if(mcAuth == null){
+			throw "Failed to login";
+		}
+		mcAuth.name = mcAuth.selected_profile.name;
+		mcAuth.uuid = mcAuth.selected_profile.id;
+		fs.writeFileSync(rootDir + "/mcAuth.json", JSON.stringify(mcAuth));
+		return true;
+	}
+	catch(e){
+		console.log(e);
+		Log("Failed to auto login", true);
+		mcAuth = null;
+		Delete(rootDir + "/mcAuth.json");
+		return false;
+	}
 }
 
 async function DownloadSkin(uuid){
@@ -306,6 +384,48 @@ ipcMain.on("mojang_login", async function(event, data){
 	Log("Logged in as: " + mcAuth.name);
 	await DownloadSkin(mcAuth.uuid);
 	win.webContents.send("loggedIn", mcAuth.uuid);
+});
+
+ipcMain.on("microsoft_login", async function(event, data){
+	if(mcAuth != null){
+		return;
+	}
+	
+	Log("Opening Microsoft login window...");
+	
+	msmc.fastLaunch("electron", (update) => {
+		if(update.error != null){
+			Log("Microsoft login - " + update.type + ": " + update.error, true);
+		}
+		else{
+			Log("Microsoft login - " + update.type + ": " + (update.data ?? "") + " " + (update.percent == null ? "" : (update.percent.toString() + "%")));
+		}
+	}).then(result => {
+		if (msmc.errorCheck(result)){
+			Log("Microsoft login - Failed to log in (1) because: " + result.type + " " + (result.reason ?? ""), true);
+			mcAuth = null;
+			win.webContents.send("showLoginArea");
+			return;
+		}
+		//console.log("Microsoft login - Player profile and mojang token: " + JSON.stringify(result));
+		Log("Logged in using Microsoft!");
+		mcAuth = result;
+		mcAuth.name = mcAuth.profile.name;
+		mcAuth.uuid = mcAuth.profile.id;
+		async function LoggedInMS(){
+			Log("Logged in as: " + mcAuth.name);
+			await DownloadSkin(mcAuth.uuid);
+			if(data.save){
+				fs.writeFileSync(rootDir + "/msmcAuth.json", JSON.stringify(mcAuth));
+			}
+			win.webContents.send("loggedIn", mcAuth.uuid);
+		}
+		LoggedInMS();
+	}).catch(reason => {
+		Log("Microsoft login - Failed to log in (2) because: " + reason, true);
+		mcAuth = null;
+		win.webContents.send("showLoginArea");
+	});
 });
 
 ipcMain.on("play", function(event, data){
