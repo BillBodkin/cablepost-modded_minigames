@@ -1,6 +1,6 @@
 {
   "name": "cablepost-modded-minigames",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Mini Madness Launcher - Modded Minecraft Minigames",
   "main": "main.js",
   "scripts": {

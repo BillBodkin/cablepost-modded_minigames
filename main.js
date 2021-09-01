@@ -20,9 +20,10 @@ const launcher = new Client();
 let win = null;
 let mcAuth = null;
 let rootDir = app.getPath('userData');
-let launcherVersion = "0.0.7";
+let launcherVersion = "0.0.8";
 let lastLauncherVersion = "";
-let redownloadWebContent = true;//for testing - CHANGE ME ON PUBLISH
+let redownloadWebContent = false;//true for testing - CHANGE ME ON PUBLISH
+let pageLoaded = false;
 
 let maxMemoryNum = Math.floor((os.freemem() / 1073741824) - 0.2);//(Math.floor(os.totalmem() / 1073741824) - 1);
 if(maxMemoryNum > 8){
@@ -57,10 +58,11 @@ function Log(msg, popup = false){
 	}
 }
 
-function CreateWindow () {
+async function CreateWindow () {
 	win = new BrowserWindow({
 		width: 800,
 		height: 600,
+		show: false,
 		backgroundColor: '#292929',
 		resizable: false,
 		icon: rootDir + '/favicon.ico',
@@ -72,7 +74,6 @@ function CreateWindow () {
 		//frame: false
 	});
 	win.setMenuBarVisibility(false);
-
 	win.loadFile('index.html');
 }
 
@@ -84,7 +85,7 @@ async function Start(){
 	lastLauncherVersion = fs.readFileSync(rootDir + "/launcherVersion.txt").toString().replace(/\s+/g, '');
 	if(lastLauncherVersion != launcherVersion || redownloadWebContent){
 		//fs.writeFileSync(rootDir + "/launcherVersion.js", "let launcherVersion = " + launcherVersion + ";");//Not needed
-		fs.writeFileSync(rootDir + "/launcherVersion.txt", launcherVersion);
+		//fs.writeFileSync(rootDir + "/launcherVersion.txt", launcherVersion);//moved till after all downloads are completed
 		
 		Delete(rootDir + "/favicon.ico");
 		await get(
@@ -95,8 +96,11 @@ async function Start(){
 		);
 	}
 	
-	CreateWindow();
-	DownloadLauncherPage();
+	await CreateWindow();
+	win.once('ready-to-show', () => {
+		win.show();
+		DownloadLauncherPage();
+	});
 }
 
 ipcMain.on("DownloadPortalbleJava", function(event, data){
@@ -232,6 +236,10 @@ async function DownloadLauncherPage(){
 	
 	await Sleep(500);
 	win.loadFile(rootDir + '/launcherScreen.html');
+	win.once('ready-to-show', () => {
+		pageLoaded = true;
+		fs.writeFileSync(rootDir + "/launcherVersion.txt", launcherVersion);
+	});
 	await Sleep(500);
 	await SetJavaPath();
 	await DownloadPortalbleJava(async function(){
@@ -254,11 +262,17 @@ async function CheckLoggedIn(){
 	}
 	
 	if(await CheckLoggedIn2()){
-		Log("Logged in as: " + mcAuth.name);
+		Log("(1) Logged in as: " + mcAuth.name);
 		await DownloadSkin(mcAuth.uuid);
+		while(!pageLoaded){
+			await Sleep(50);
+		};
 		win.webContents.send("loggedIn", mcAuth.uuid);
 	}
 	else{
+		while(!pageLoaded){
+			await Sleep(50);
+		};
 		win.webContents.send("showLoginArea");
 	}
 }
@@ -323,6 +337,7 @@ async function CheckLoggedInMojang(){
 }
 
 async function DownloadSkin(uuid){
+	Log("Downloading skin");
 	await get(
 		"https://crafatar.com/skins/" + uuid, {
 			directory: rootDir,
@@ -330,6 +345,7 @@ async function DownloadSkin(uuid){
 		}
 	);
 	await Sleep(100);
+	Log("Downloaded skin");
 }
 
 async function RefreshToken(accessToken, clientToken){
