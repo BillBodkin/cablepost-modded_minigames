@@ -16,21 +16,28 @@ const fetch = require('node-fetch');
 
 msmc.setFetch(fetch);
 
+let args = process.argv;
+
 const launcher = new Client();
 let win = null;
 let mcAuth = null;
 let rootDir = app.getPath('userData');
-let launcherVersion = "0.0.8";
+let launcherVersion = "0.0.12";
 let lastLauncherVersion = "";
 let redownloadWebContent = false;//true for testing - CHANGE ME ON PUBLISH
 let pageLoaded = false;
 
-let maxMemoryNum = Math.floor((os.freemem() / 1073741824) - 0.2);//(Math.floor(os.totalmem() / 1073741824) - 1);
+let adminMode = args.includes("-adminMode");
+
+let totalMemory = (Math.floor(os.totalmem() / 1073741824) - 1);
+let minMaxMemory = totalMemory > 6 ? 4 : totalMemory;
+
+let maxMemoryNum = Math.floor((os.freemem() / 1073741824) - 0.2);
 if(maxMemoryNum > 8){
 	maxMemoryNum = 8;
 }
-else if(maxMemoryNum < 1){
-	maxMemoryNum = 1;
+else if(maxMemoryNum < minMaxMemory){
+	maxMemoryNum = minMaxMemory;
 }
 
 let minMemoryNum = Math.floor(maxMemoryNum / 2);
@@ -82,7 +89,12 @@ app.whenReady().then(() => {
 });
 
 async function Start(){
-	lastLauncherVersion = fs.readFileSync(rootDir + "/launcherVersion.txt").toString().replace(/\s+/g, '');
+	if(fs.existsSync(rootDir + "/launcherVersion.txt")){
+		lastLauncherVersion = fs.readFileSync(rootDir + "/launcherVersion.txt").toString().replace(/\s+/g, '');
+	}
+	else{
+		lastLauncherVersion = "new";
+	}
 	if(lastLauncherVersion != launcherVersion || redownloadWebContent){
 		//fs.writeFileSync(rootDir + "/launcherVersion.js", "let launcherVersion = " + launcherVersion + ";");//Not needed
 		//fs.writeFileSync(rootDir + "/launcherVersion.txt", launcherVersion);//moved till after all downloads are completed
@@ -247,6 +259,10 @@ async function DownloadLauncherPage(){
 		win.webContents.send("minMemory", minMemory);
 		win.webContents.send("maxMemory", maxMemory);
 	});
+	
+	if(adminMode){
+		Log("In Admin Mode");
+	}
 }
 
 async function CheckLoggedIn(){
@@ -267,13 +283,25 @@ async function CheckLoggedIn(){
 		while(!pageLoaded){
 			await Sleep(50);
 		};
+		LowMemoryWarning();
 		win.webContents.send("loggedIn", mcAuth.uuid);
 	}
 	else{
 		while(!pageLoaded){
 			await Sleep(50);
 		};
+		LowMemoryWarning();
 		win.webContents.send("showLoginArea");
+	}
+}
+
+function LowMemoryWarning(){
+	if(maxMemoryNum <= 2){
+		Log("Low memory! Close other programs and restart launcher.", true)
+	}
+	
+	if(totalMemory <= 4){
+		Log("You may not have enough RAM to play this!", true)
 	}
 }
 
@@ -338,12 +366,25 @@ async function CheckLoggedInMojang(){
 
 async function DownloadSkin(uuid){
 	Log("Downloading skin");
-	await get(
-		"https://crafatar.com/skins/" + uuid, {
-			directory: rootDir,
-			filename: "skin.png"
+	let skinUrls = [
+		"https://mc-heads.net/skin/",
+		"https://crafatar.com/skins/",
+		"https://minotar.net/skin/"
+	];
+	for(let i = 0; i < skinUrls.length; i++){
+		try {
+			await get(
+				skinUrls[i] + uuid, {
+					directory: rootDir,
+					filename: "skin.png"
+				}
+			);
+			break;
+		}catch(e){
+			Log("Failed to download skin, will try again " + i.toString());
+			await Sleep(500);
 		}
-	);
+	}
 	await Sleep(100);
 	Log("Downloaded skin");
 }
@@ -483,13 +524,14 @@ async function Play(){
 			max: maxMemory,
 			min: minMemory
 		},
-		javaPath: javaPath
+		javaPath: javaPath,
+		customArgs: ["-Dlog4j2.formatMsgNoLookups=true"]
 	}
 
 	launcher.launch(opts);
 
-	launcher.on('debug', (e) => Log(e));
-	launcher.on('data', (e) => Log(e));
+	launcher.on('debug', (e) => Log(e.replace("<", "(").replace(">", ")")));
+	launcher.on('data', (e) => Log(e.replace("<", "(").replace(">", ")")));
 }
 
 function Delete(file){
@@ -500,6 +542,7 @@ function Delete(file){
 }
 
 async function UpdateFromJson(){
+	Log("Current date and time is: " + new Date().toISOString());
 	Log("Deleting old files");
 	Delete(rootDir + "/modpackFiles.json");
 	//fs.rmdirSync(rootDir + "/minecraft", { recursive: true });
@@ -526,6 +569,15 @@ async function UpdateFromJson(){
 	Log("Downloaded modpackFiles.json");
 	await Sleep(500);
 	let modpackFiles = require(rootDir + "/modpackFiles.json");
+	
+	if(adminMode){
+		modpackFiles.minecraft.mods["baritone-standalone-fabric-1.6.3.jar"] = {
+			FILE: true,
+			url: "https://objects.githubusercontent.com/github-production-release-asset-2e65be/143175496/65f8eb00-6801-11eb-9389-5bbedb84995d?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIWNJYAX4CSVEH53A%2F20211127%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20211127T152742Z&X-Amz-Expires=300&X-Amz-Signature=23b00d738f3e311836e08ebdca87c301e369935a655782d13fd288302f1e6ba6&X-Amz-SignedHeaders=host&actor_id=18099196&key_id=0&repo_id=143175496&response-content-disposition=attachment%3B%20filename%3Dbaritone-standalone-fabric-1.6.3.jar&response-content-type=application%2Foctet-stream",
+			credict: "https://github.com/cabaletta/baritone/"
+		}
+	}
+	
 	let modpackFilesCurrent = {
 		minecraft: {}
 	};
@@ -546,8 +598,11 @@ async function CheckFolderUpdated(folder, data, dataCurrent){
 		//delete any mods not in JSON
 		fs.readdirSync(folder).forEach(file => {
 			if(!(file in data)){
-				Log("Deleting old mod: " + file);
-				fs.unlinkSync(folder + "/" + file);
+				let fStat = fs.lstatSync(folder + "/" + file);
+				if(fStat.isFile()){
+					Log("Deleting old mod: " + file);
+					fs.unlinkSync(folder + "/" + file);
+				}
 			}
 		});
 	}

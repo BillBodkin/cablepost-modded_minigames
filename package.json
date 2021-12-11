@@ -1,14 +1,16 @@
 {
   "name": "cablepost-modded-minigames",
-  "version": "0.0.8",
+  "version": "0.0.12",
   "description": "Mini Madness Launcher - Modded Minecraft Minigames",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "startAdminMode": "electron . -adminMode",
     "dist": "electron-builder",
     "buildLinux": "electron-builder --linux",
     "buildWin": "electron-builder --win",
     "buildMac": "electron-builder --mac",
+    "buildGood": "electron-builder --linux;electron-builder --win",
     "buildAll": "electron-builder --linux;electron-builder --win;electron-builder --mac"
   },
   "build": {
@@ -43,20 +45,20 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "electron": "^13.1.4",
+    "electron": "^13.5.1",
     "electron-builder": "^22.11.7"
   },
   "dependencies": {
-    "adm-zip": "^0.5.5",
+    "adm-zip": "^0.5.7",
     "async-get-file": "^1.0.4",
-    "electron-log": "^4.3.5",
+    "electron-log": "^4.4.1",
     "fetch": "^1.1.0",
     "fs-exists-sync": "^0.1.0",
     "inly": "^4.0.8",
-    "js-file-downloader": "^1.1.20",
-    "minecraft-launcher-core": "^3.16.4",
-    "msmc": "^2.2.1",
-    "node-fetch": "^2.6.1",
-    "nodejs-file-downloader": "^4.7.1"
+    "js-file-downloader": "^1.1.22",
+    "minecraft-launcher-core": "^3.16.8",
+    "msmc": "^2.2.2",
+    "node-fetch": "^2.6.5",
+    "nodejs-file-downloader": "^4.7.4"
   }
 }
